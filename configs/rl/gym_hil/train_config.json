@@ -25,12 +25,12 @@
   "env": {
     "type": "gym_manipulator",
     "name": "gym_hil",
-    "task": "gym_hil/PandaPickCubeKeyboard-v0",
+    "task": "gym_hil/PandaPickCubeBase-v0",
     "fps": 10,
     "robot": null,
     "teleop": null,
     "processor": {
-      "control_mode": "keyboard",
+      "control_mode": "base",
       "gripper": {
         "use_gripper": true,
         "gripper_penalty": -0.02,
@@ -97,7 +97,7 @@
         "shape": [3]
       }
     },
-    "device": "mps",
+    "device": "cuda",
     "use_amp": false,
     "dataset_stats": {
       "observation.images.front": {

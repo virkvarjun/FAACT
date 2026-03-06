@@ -1,0 +1,43 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Installers
+Miniforge3-*.sh
+
+# Conda
+miniforge3/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+wandb/
+
+# Data
+*.hdf5
+*.h5
+*.pkl
+*.parquet

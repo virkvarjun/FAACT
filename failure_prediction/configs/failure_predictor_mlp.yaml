@@ -1,0 +1,33 @@
+# Failure predictor MLP training config
+# Use with: python -m failure_prediction.scripts.train_failure_predictor --config failure_prediction/configs/failure_predictor_mlp.yaml
+
+# Data
+mock_data: false
+processed_dir: null  # e.g. failure_dataset/transfer_cube/processed
+feature_field: feat_decoder_mean
+label_field: failure_within_k
+
+# Model
+hidden_dims: [256, 128]
+dropout: 0.1
+
+# Training
+epochs: 20
+batch_size: 256
+lr: 0.001
+pos_weight: null  # auto from class balance if null
+
+# Splits (episode-level)
+train_frac: 0.7
+val_frac: 0.15
+test_frac: 0.15
+seed: 42
+
+# Output
+output_dir: failure_prediction_runs/default
+
+# Mock-only (ignored when mock_data=false)
+feature_dim: 256
+num_mock_episodes: 50
+timesteps_per_episode: 40
+mock_positive_ratio: 0.3

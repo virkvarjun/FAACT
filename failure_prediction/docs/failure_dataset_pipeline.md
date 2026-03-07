@@ -66,8 +66,13 @@ failure_dataset/transfer_cube/
 | `reward` | (T,) | Per-step reward |
 | `done` | (T,) | Done flag |
 | `success` | (T,) | Per-step success flag from env |
+| `terminated` | (T,) | Per-step terminated flag |
+| `truncated` | (T,) | Per-step truncated flag |
+| `env_info_json` | (T,) | JSON-serialized environment info dict |
 | `obs_state` | (T, state_dim) | Robot proprioceptive state (joint positions) |
+| `image_<camera>` | (T, H, W, 3) | Optional raw images when `--save_images` is enabled |
 | `predicted_action_chunk` | (T, chunk_size, action_dim) | Full predicted action chunks (at chunk boundaries) |
+| `chunk_length` | (T,) | Length of the currently active action chunk |
 | `chunk_step_idx` | (T,) | Position within current chunk |
 | `new_chunk_generated` | (T,) | Whether a new chunk was predicted this step |
 | `feat_latent_sample` | (T, latent_dim) | VAE latent representation (at chunk boundaries) |
@@ -127,6 +132,9 @@ Episode outcomes are determined by priority:
 3. Fallback: `unknown`
 
 Termination reasons: `success`, `timeout_or_failure`, `terminated_failure`, `unknown`.
+
+Episode metadata includes `episode_id`, `checkpoint_path`, `task_name`, `seed`, `success`,
+`episode_failed`, `num_steps`, `terminal_step`, `termination_reason`, and `return`.
 
 ## Known Limitations
 

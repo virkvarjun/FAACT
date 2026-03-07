@@ -81,6 +81,9 @@ def process_episodes(
         "near_failure": [],
         "reward": [],
         "done": [],
+        "terminated": [],
+        "truncated": [],
+        "chunk_length": [],
         "chunk_step_idx": [],
         "new_chunk_generated": [],
     }
@@ -94,7 +97,7 @@ def process_episodes(
         ep_id = meta["episode_id"]
         num_steps = meta["num_steps"]
         ep_failed = meta.get("episode_failed", not meta.get("success", False))
-        terminal_step = meta.get("num_steps", num_steps) - 1
+        terminal_step = meta.get("terminal_step", meta.get("num_steps", num_steps) - 1)
 
         labels = label_failure_windows(
             num_steps=num_steps,
@@ -124,6 +127,21 @@ def process_episodes(
             dones[-1] = 1
             all_rows["done"].extend(dones)
 
+        if "terminated" in arrays:
+            all_rows["terminated"].extend(arrays["terminated"].astype(int).tolist())
+        else:
+            all_rows["terminated"].extend([0] * num_steps)
+
+        if "truncated" in arrays:
+            all_rows["truncated"].extend(arrays["truncated"].astype(int).tolist())
+        else:
+            all_rows["truncated"].extend([0] * num_steps)
+
+        if "chunk_length" in arrays:
+            all_rows["chunk_length"].extend(arrays["chunk_length"].tolist())
+        else:
+            all_rows["chunk_length"].extend([-1] * num_steps)
+
         if "chunk_step_idx" in arrays:
             all_rows["chunk_step_idx"].extend(arrays["chunk_step_idx"].tolist())
         else:
@@ -135,13 +153,26 @@ def process_episodes(
             all_rows["new_chunk_generated"].extend([0] * num_steps)
 
         for key in arrays:
-            if key in ("reward", "done", "timestep", "success", "chunk_step_idx",
+            if key in ("reward", "done", "terminated", "truncated", "timestep", "success", "chunk_length", "chunk_step_idx",
                        "new_chunk_generated", "_meta_json"):
                 continue
-            if arrays[key].ndim >= 2 and arrays[key].shape[0] == num_steps:
-                if key not in array_fields:
-                    array_fields[key] = []
-                array_fields[key].append(arrays[key])
+            if arrays[key].shape[0] != num_steps:
+                continue
+            if arrays[key].ndim == 1:
+                if arrays[key].dtype.kind in {"U", "S", "O"}:
+                    result_key = key
+                    if result_key not in all_rows:
+                        all_rows[result_key] = []
+                    all_rows[result_key].extend(arrays[key].tolist())
+                else:
+                    result_key = key
+                    if result_key not in all_rows:
+                        all_rows[result_key] = []
+                    all_rows[result_key].extend(arrays[key].tolist())
+                continue
+            if key not in array_fields:
+                array_fields[key] = []
+            array_fields[key].append(arrays[key])
 
     result = {}
     for key, vals in all_rows.items():

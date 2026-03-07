@@ -1,0 +1,30 @@
+# FIPER baseline config
+# RND + ACE + conformal calibration + windowed alarm
+
+# Data
+mock_data: false
+processed_dir: null  # e.g. failure_dataset/transfer_cube/processed
+feature_field: feat_decoder_mean
+action_chunk_field: predicted_action_chunk
+
+# RND
+rnd_checkpoint: null  # or path to rnd_model.pt
+rnd_hidden_dims: [256, 256]
+
+# Splits (episode-level)
+train_frac: 0.6
+calibration_frac: 0.2
+test_frac: 0.2
+
+# Calibration
+alpha: 0.1  # miscoverage for conformal threshold
+
+# Alarm
+window_size: 3
+agg_mode: mean
+rule: and
+
+# Mock-only
+feature_dim: 256
+num_mock_episodes: 50
+timesteps_per_episode: 40

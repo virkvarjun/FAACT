@@ -1,0 +1,12 @@
+# Recommended deployment configuration for failure-aware ACT
+# Generated from offline threshold sweep and lead-time analysis
+
+risk_threshold: 0.5  # Default; override with best_f1_threshold from analysis
+risk_feature_field: feat_decoder_mean
+num_candidate_chunks: 5
+obs_noise_std: 0.03
+
+# Rationale:
+# - risk_threshold: Best F1 on validation/test; tune per deployment
+# - num_candidate_chunks: Balance diversity vs latency (5 is reasonable)
+# - obs_noise_std: Small noise for candidate diversity without distorting observations

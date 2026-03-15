@@ -13,7 +13,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Fields that are labels or metadata, not feature inputs
+# Labels/metadata; excluded when picking feature fields
 LABEL_AND_META_KEYS = {
     "episode_id",
     "timestep",
@@ -33,7 +33,7 @@ LABEL_AND_META_KEYS = {
 
 
 def get_available_feature_fields(dataset: dict) -> list[str]:
-    """Return sorted list of feature field names (feat_* and other numeric arrays)."""
+    """Return feature fields (feat_*, etc.) excluding labels and metadata. Must be numeric, 2D or 1D-numeric."""
     candidates = []
     for key in dataset:
         if key in LABEL_AND_META_KEYS:
@@ -134,7 +134,7 @@ def load_failure_dataset(
         if arr.ndim == 1:
             arr = arr.reshape(-1, 1)
         parts.append(arr)
-    features = np.concatenate(parts, axis=1)
+    features = np.concatenate(parts, axis=1)  # single or multi-field -> (N, input_dim)
     labels = np.asarray(data[label_field], dtype=np.float32)
     episode_ids = np.asarray(data["episode_id"], dtype=np.int64)
     timesteps = np.asarray(data["timestep"], dtype=np.int64) if "timestep" in data else np.arange(len(labels))
@@ -191,6 +191,7 @@ def _create_mock_dataset(
     labels[:n_positive] = 1.0
     rng.shuffle(labels)
 
+    # Positive samples shifted +0.5 so model can learn separable distributions
     features = np.zeros((total_steps, feature_dim), dtype=np.float32)
     pos_mask = labels > 0.5
     neg_mask = ~pos_mask

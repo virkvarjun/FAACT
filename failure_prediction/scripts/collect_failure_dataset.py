@@ -1,21 +1,28 @@
 #!/usr/bin/env python
-"""Collect failure prediction training data by running ACT rollouts.
+"""Collect failure prediction training data by running policy rollouts (ACT or π₀).
 
-Loads a trained ACT checkpoint, runs evaluation rollouts, and logs per-step
-data including observations, action chunks, ACT embeddings, and outcomes.
+Loads a trained checkpoint, runs evaluation rollouts, and logs per-step
+data including observations, action chunks, embeddings, and outcomes.
 
-Example:
+Supports --policy_type act|pi0 for failure-aware wrapper around ACT or π₀ (PI0).
+
+Example (ACT):
     python -m failure_prediction.scripts.collect_failure_dataset \
-        --checkpoint /path/to/checkpoints/100000/pretrained_model \
-        --task AlohaTransferCube-v0 \
-        --num_episodes 200 \
-        --output_dir failure_dataset/transfer_cube \
-        --device cuda
+        --checkpoint /path/to/act_checkpoint/pretrained_model \
+        --task AlohaTransferCube-v0 --policy_type act \
+        --num_episodes 200 --output_dir failure_dataset/transfer_cube
+
+Example (π₀):
+    python -m failure_prediction.scripts.collect_failure_dataset \
+        --checkpoint lerobot/pi0_base --policy_type pi0 \
+        --task AlohaTransferCube-v0 --task_desc "transfer the cube to the target" \
+        --num_episodes 200 --output_dir failure_dataset/pi0_transfer_cube
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import sys
@@ -41,7 +48,7 @@ from failure_prediction.utils.success_inference import infer_episode_outcome
 
 
 def extract_obs_images(obs: dict) -> dict[str, np.ndarray]:
-    """Return image observations in a flat dict keyed by camera name."""
+    """Extract pixels from env obs. Handles dict (multi-cam) or single array."""
     images = {}
     raw_pixels = obs.get("pixels")
     if isinstance(raw_pixels, dict):
@@ -78,11 +85,15 @@ def parse_args():
     p.add_argument("--perturbation_mode", type=str, default="none",
                     choices=["none", "obs_noise", "action_noise"],
                     help="Perturbation mode (placeholder for future experiments)")
+    p.add_argument("--policy_type", type=str, default="act", choices=["act", "pi0"],
+                    help="Base policy: act (LeRobot ACT) or pi0 (π₀)")
+    p.add_argument("--task_desc", type=str, default="",
+                    help="Language task for π₀ (e.g. 'transfer the cube to the target'). Required for pi0.")
     return p.parse_args()
 
 
+# Env: gym_aloha/AlohaTransferCube-v0 etc.
 def make_single_env(task: str, env_type: str, max_steps: int | None = None):
-    """Create a single (non-vectorized) gym environment."""
     gym_kwargs = {
         "obs_type": "pixels_agent_pos",
         "render_mode": "rgb_array",
@@ -95,45 +106,89 @@ def make_single_env(task: str, env_type: str, max_steps: int | None = None):
     return env
 
 
-def load_policy_and_processors(checkpoint_path: str, device: str):
-    """Load ACT policy and its pre/post processors from a checkpoint."""
+def load_act_policy_and_processors(checkpoint_path: str, device: str):
+    """Load ACTPolicy from checkpoint."""
+    from pathlib import Path
+
     from lerobot.policies.act.modeling_act import ACTPolicy
     from lerobot.policies.factory import make_pre_post_processors
 
-    policy = ACTPolicy.from_pretrained(pretrained_name_or_path=checkpoint_path)
+    path = Path(checkpoint_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint not found at {path}. "
+            "If trained on RunPod, copy the checkpoint locally or run this script on RunPod."
+        )
+    ckpt_str = str(path)
+    policy = ACTPolicy.from_pretrained(
+        pretrained_name_or_path=ckpt_str,
+        local_files_only=True,
+    )
     policy.to(device)
     policy.eval()
 
-    preprocessor_overrides = {
-        "device_processor": {"device": device},
-    }
+    preprocessor_overrides = {"device_processor": {"device": device}}
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=policy.config,
-        pretrained_path=checkpoint_path,
+        pretrained_path=ckpt_str,
         preprocessor_overrides=preprocessor_overrides,
     )
-
     return policy, preprocessor, postprocessor
 
 
-def preprocess_obs(obs: dict) -> dict[str, torch.Tensor]:
-    """Convert raw env observation to policy-compatible tensor dict."""
+def load_pi0_policy_and_processors(checkpoint_path: str, device: str):
+    """Load PI0Policy from checkpoint. π₀ needs task string for language conditioning."""
+    from pathlib import Path
+
+    from lerobot.policies.factory import make_pre_post_processors
+    from lerobot.policies.pi0.modeling_pi0 import PI0Policy
+
+    path = Path(checkpoint_path).resolve()
+    ckpt_str = str(path) if path.exists() else checkpoint_path
+    policy = PI0Policy.from_pretrained(
+        pretrained_name_or_path=ckpt_str,
+        local_files_only=path.exists(),
+    )
+    policy.to(device)
+    policy.eval()
+
+    preprocessor_overrides = {"device_processor": {"device": device}}
+    preprocessor, postprocessor = make_pre_post_processors(
+        policy_cfg=policy.config,
+        pretrained_path=ckpt_str,
+        preprocessor_overrides=preprocessor_overrides,
+    )
+    return policy, preprocessor, postprocessor
+
+
+def load_policy_and_processors(checkpoint_path: str, device: str, policy_type: str = "act"):
+    """Load policy and processors by type (act or pi0)."""
+    if policy_type == "act":
+        return load_act_policy_and_processors(checkpoint_path, device)
+    if policy_type == "pi0":
+        return load_pi0_policy_and_processors(checkpoint_path, device)
+    raise ValueError(f"Unknown policy_type: {policy_type}")
+
+
+# Env obs -> policy format: pixels -> (1,C,H,W) float [0,1], agent_pos -> state
+def preprocess_obs(obs: dict, task_desc: str | None = None, policy_type: str = "act"):
+    """Build obs dict for ACT, or transition for π₀ (with task in complementary_data)."""
     result = {}
 
     if "pixels" in obs:
         if isinstance(obs["pixels"], dict):
             for key, img in obs["pixels"].items():
-                img_t = torch.from_numpy(img)
+                img_t = torch.from_numpy(np.asarray(img))
                 if img_t.ndim == 3:
                     img_t = img_t.unsqueeze(0)
                 img_t = img_t.permute(0, 3, 1, 2).float() / 255.0
                 result[f"observation.images.{key}"] = img_t
         else:
-            img_t = torch.from_numpy(obs["pixels"])
+            img_t = torch.from_numpy(np.asarray(obs["pixels"]))
             if img_t.ndim == 3:
                 img_t = img_t.unsqueeze(0)
             img_t = img_t.permute(0, 3, 1, 2).float() / 255.0
-            result["observation.image"] = img_t
+            result["observation.images.main"] = img_t
 
     if "agent_pos" in obs:
         state = torch.from_numpy(np.asarray(obs["agent_pos"], dtype=np.float32))
@@ -141,17 +196,92 @@ def preprocess_obs(obs: dict) -> dict[str, torch.Tensor]:
             state = state.unsqueeze(0)
         result["observation.state"] = state
 
+    if policy_type == "pi0" and task_desc:
+        from lerobot.processor.converters import create_transition
+        task = task_desc if task_desc.endswith("\n") else f"{task_desc}\n"
+        return create_transition(observation=result, complementary_data={"task": task})
     return result
 
 
-def features_to_numpy(features: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
-    """Convert model features dict from GPU tensors to CPU numpy arrays.
+def _predict_act_with_features(policy, obs_processed):
+    if hasattr(policy, "predict_action_chunk_with_features"):
+        return policy.predict_action_chunk_with_features(obs_processed)
+    # Fallback 1: model supports return_features=True (custom lerobot fork)
+    from lerobot.utils.constants import OBS_IMAGES
 
-    Reduces high-dimensional features to manageable sizes:
-    - latent_sample: kept as-is (B, latent_dim)
-    - encoder_out: first token only (B, dim_model) - the latent encoding
-    - decoder_out: mean-pooled over chunk dim (B, dim_model)
-    """
+    # ACT expects OBS_IMAGES as list of tensors; config lists which keys to use
+    batch = dict(obs_processed)
+    if getattr(policy, "config", None) and getattr(policy.config, "image_features", None):
+        batch[OBS_IMAGES] = [batch[key] for key in policy.config.image_features]
+    with torch.inference_mode():
+        try:
+            out = policy.model(batch, return_features=True)
+        except TypeError:
+            pass  # Fall through to fallback 2
+        else:
+            actions = out[0]
+            features = out[2] if len(out) >= 3 else {}
+            return actions, features
+        # Fallback 2: hooks on encoder/decoder output; works with vanilla lerobot
+        captured = {}
+
+        def make_hook(name):
+            def hook(_m, _in, out):
+                captured[name] = out.detach()
+
+            return hook
+
+        handles = []
+        if hasattr(policy.model, "encoder"):
+            handles.append(policy.model.encoder.register_forward_hook(make_hook("encoder_out")))
+        if hasattr(policy.model, "decoder"):
+            handles.append(policy.model.decoder.register_forward_hook(make_hook("decoder_out")))
+
+        actions = policy.model(batch)[0]
+        for h in handles:
+            h.remove()
+        batch_size = actions.shape[0]
+        cfg = getattr(policy.model, "config", policy.config)
+        latent_dim = getattr(cfg, "latent_dim", 32)
+        dim_model = getattr(cfg, "dim_model", 512)
+
+        def _t(x):
+            if x.dim() == 3:
+                return x.transpose(0, 1)  # (S,B,C) -> (B,S,C) to match expected layout
+            return x
+
+        enc = captured.get("encoder_out")
+        dec = captured.get("decoder_out")
+        # latent_sample zeros when no VAE; encoder/decoder from hooks
+        features = {
+            "latent_sample": torch.zeros(batch_size, latent_dim, device=actions.device, dtype=actions.dtype),
+            "encoder_out": _t(enc) if enc is not None else torch.zeros(batch_size, 1, dim_model, device=actions.device, dtype=actions.dtype),
+            "decoder_out": _t(dec) if dec is not None else torch.zeros(batch_size, actions.shape[1], dim_model, device=actions.device, dtype=actions.dtype),
+        }
+        return actions, features
+
+
+def _predict_pi0_with_features(policy, obs_processed):
+    """π₀: predict chunk and use action_chunk_mean as feature (no internal embeddings exposed)."""
+    with torch.inference_mode():
+        actions = policy.predict_action_chunk(obs_processed)
+    n_steps = getattr(policy.config, "n_action_steps", actions.shape[1])
+    actions = actions[:, :n_steps]
+    # Mean over chunk dim -> fixed-size vector for failure predictor
+    mean_vec = actions.mean(dim=1)
+    features = {"action_chunk_mean": mean_vec}
+    return actions, features
+
+
+def predict_action_chunk_with_features(policy, obs_processed, policy_type: str = "act"):
+    """Get actions and features for failure prediction. Dispatches by policy type."""
+    if policy_type == "pi0":
+        return _predict_pi0_with_features(policy, obs_processed)
+    return _predict_act_with_features(policy, obs_processed)
+
+
+# encoder_out -> first token only; decoder_out -> mean over chunk. action_chunk_mean for π₀.
+def features_to_numpy(features: dict[str, torch.Tensor]) -> dict[str, np.ndarray]:
     result = {}
     for key, val in features.items():
         v = val.detach().cpu()
@@ -161,20 +291,44 @@ def features_to_numpy(features: dict[str, torch.Tensor]) -> dict[str, np.ndarray
             result["decoder_mean"] = v.mean(dim=1).squeeze(0).numpy()
         elif key == "latent_sample":
             result["latent_sample"] = v.squeeze(0).numpy()
+        elif key == "action_chunk_mean":
+            result["action_chunk_mean"] = v.squeeze(0).numpy()  # π₀ fallback
         else:
             result[key] = v.squeeze(0).numpy()
     return result
 
 
+def _default_task_desc(task_id: str) -> str:
+    """Default language task for π₀ from gym task ID."""
+    lower = task_id.lower()
+    if "transfer" in lower and "cube" in lower:
+        return "transfer the cube to the target"
+    if "aloha" in lower:
+        return "pick up the object and complete the task"
+    return "complete the task"
+
+
+# Main loop: load policy, run episodes, log features + outcomes per step to raw/episode_*.npz
 def run_collection(args):
-    """Main collection loop."""
-    logger.info(f"Loading policy from {args.checkpoint}")
+    if args.policy_type == "pi0" and not args.task_desc:
+        args.task_desc = _default_task_desc(args.task)
+        logger.info(f"Using default task_desc for π₀: {args.task_desc!r}")
+
+    pkg = f"gym_{args.env_type}"
+    try:
+        importlib.import_module(pkg)
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            f"Environment package '{pkg}' not found. Install with: pip install gym-{args.env_type}"
+        ) from e
+
+    logger.info(f"Loading {args.policy_type} policy from {args.checkpoint}")
     policy, preprocessor, postprocessor = load_policy_and_processors(
-        args.checkpoint, args.device
+        args.checkpoint, args.device, policy_type=args.policy_type
     )
 
-    chunk_size = policy.config.chunk_size
-    n_action_steps = policy.config.n_action_steps
+    chunk_size = getattr(policy.config, "chunk_size", getattr(policy.config, "n_action_steps", 100))
+    n_action_steps = getattr(policy.config, "n_action_steps", chunk_size)
     logger.info(f"Policy loaded: chunk_size={chunk_size}, n_action_steps={n_action_steps}")
 
     logger.info(f"Creating environment: {args.env_type}/{args.task}")
@@ -189,7 +343,9 @@ def run_collection(args):
 
     collection_meta = {
         "checkpoint_path": args.checkpoint,
+        "policy_type": args.policy_type,
         "task": args.task,
+        "task_desc": getattr(args, "task_desc", ""),
         "env_type": args.env_type,
         "num_episodes": args.num_episodes,
         "device": args.device,
@@ -239,14 +395,16 @@ def run_collection(args):
         step = 0
 
         while not done and step < max_ep_steps:
-            obs_dict = preprocess_obs(raw_obs)
+            obs_dict = preprocess_obs(raw_obs, task_desc=args.task_desc, policy_type=args.policy_type)
             obs_processed = preprocessor(obs_dict)
 
+            # Request new chunk when we've exhausted the current one (chunk_size actions, n_action_steps per rollout)
             need_new_chunk = (current_chunk is None) or (chunk_step_idx >= n_action_steps)
 
             if need_new_chunk:
-                with torch.inference_mode():
-                    action_chunk, features = policy.predict_action_chunk_with_features(obs_processed)
+                action_chunk, features = predict_action_chunk_with_features(
+                    policy, obs_processed, policy_type=args.policy_type
+                )
                 current_chunk = action_chunk
                 current_features = features_to_numpy(features) if args.save_embeddings else None
                 chunk_step_idx = 0
@@ -274,7 +432,7 @@ def run_collection(args):
                 obs_state = np.asarray(raw_obs["agent_pos"], dtype=np.float32)
 
             chunk_np = None
-            if args.save_action_chunks and new_chunk:
+            if args.save_action_chunks and current_chunk is not None:
                 chunk_np = current_chunk.detach().cpu().numpy()
                 if chunk_np.ndim == 3:
                     chunk_np = chunk_np[0]
@@ -294,7 +452,7 @@ def run_collection(args):
                 chunk_length=current_chunk.shape[1] if current_chunk is not None else None,
                 chunk_step_idx=chunk_step_idx,
                 new_chunk_generated=new_chunk,
-                features=current_features if new_chunk else None,
+                features=current_features,  # same features for all steps in chunk (no new pred)
             )
 
             episode_rewards.append(float(reward))

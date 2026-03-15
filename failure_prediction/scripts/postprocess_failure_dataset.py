@@ -47,7 +47,7 @@ def parse_args():
 
 
 def load_all_episodes(input_dir: Path) -> list[dict]:
-    """Load all episode .npz files from a directory."""
+    """Load all raw episode .npz files. Each returns {meta, arrays}."""
     files = sorted(input_dir.glob("episode_*.npz"))
     if not files:
         raise FileNotFoundError(f"No episode files found in {input_dir}")
@@ -62,15 +62,12 @@ def load_all_episodes(input_dir: Path) -> list[dict]:
     return episodes
 
 
+# Call label_failure_windows per episode; copy feat_* from raw. Output: timestep_dataset.npz
 def process_episodes(
     episodes: list[dict],
     failure_horizon: int,
     near_failure_horizon: int | None,
 ) -> dict:
-    """Process all episodes into a flat timestep dataset with labels.
-
-    Returns a dict of arrays, each with shape (total_timesteps, ...).
-    """
     all_rows = {
         "episode_id": [],
         "timestep": [],
@@ -99,6 +96,7 @@ def process_episodes(
         ep_failed = meta.get("episode_failed", not meta.get("success", False))
         terminal_step = meta.get("terminal_step", meta.get("num_steps", num_steps) - 1)
 
+        # Per-timestep labels: failure_within_k, steps_to_failure, near_failure
         labels = label_failure_windows(
             num_steps=num_steps,
             episode_failed=ep_failed,
@@ -152,6 +150,7 @@ def process_episodes(
         else:
             all_rows["new_chunk_generated"].extend([0] * num_steps)
 
+        # Copy embedding arrays (feat_decoder_mean, etc.) to output
         for key in arrays:
             if key in ("reward", "done", "terminated", "truncated", "timestep", "success", "chunk_length", "chunk_step_idx",
                        "new_chunk_generated", "_meta_json"):
@@ -159,6 +158,7 @@ def process_episodes(
             if arrays[key].shape[0] != num_steps:
                 continue
             if arrays[key].ndim == 1:
+                # 1D scalars per step -> extend to all_rows
                 if arrays[key].dtype.kind in {"U", "S", "O"}:
                     result_key = key
                     if result_key not in all_rows:
@@ -170,6 +170,7 @@ def process_episodes(
                         all_rows[result_key] = []
                     all_rows[result_key].extend(arrays[key].tolist())
                 continue
+            # 2D+ arrays (feat_decoder_mean etc.) -> concatenate across episodes later
             if key not in array_fields:
                 array_fields[key] = []
             array_fields[key].append(arrays[key])
@@ -180,7 +181,7 @@ def process_episodes(
 
     for key, val_list in array_fields.items():
         try:
-            result[key] = np.concatenate(val_list, axis=0)
+            result[key] = np.concatenate(val_list, axis=0)  # stack episodes vertically
         except ValueError:
             logger.warning(f"Skipping array field '{key}' due to inconsistent shapes")
 
@@ -188,7 +189,7 @@ def process_episodes(
 
 
 def compute_stats(dataset: dict, episodes: list[dict]) -> dict:
-    """Compute summary statistics for the processed dataset."""
+    """Compute summary stats: episode counts, class balance, avg lengths."""
     n_episodes = len(episodes)
     n_success = sum(1 for ep in episodes if ep["meta"].get("success", False))
     n_failed = n_episodes - n_success

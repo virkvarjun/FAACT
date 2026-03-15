@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 
 
+# Infer success/failure from env signals (rewards, is_success, terminated, truncated).
+# Used when labeling episodes after collection.
 def infer_episode_outcome(
     rewards: np.ndarray,
     successes: np.ndarray,
@@ -37,15 +39,19 @@ def infer_episode_outcome(
     """
     num_steps = len(rewards)
 
+    # Find first done step (episode end)
     done_indices = np.where(dones)[0]
     terminal_step = int(done_indices[0]) if len(done_indices) > 0 else num_steps - 1
 
+    # Primary signal: env sets is_success when task completes
     success = bool(np.any(successes))
 
     if success:
         termination_reason = "success"
+    # truncated = hit max steps (timeout) or env-specific truncation
     elif truncated is not None and len(truncated) > 0 and truncated[terminal_step]:
         termination_reason = "timeout_or_failure"
+    # terminated = hard failure (e.g. drop, collision)
     elif terminated is not None and len(terminated) > 0 and terminated[terminal_step]:
         termination_reason = "terminated_failure"
     else:

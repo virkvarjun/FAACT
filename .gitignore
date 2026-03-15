@@ -36,8 +36,16 @@ miniforge3/
 *.log
 wandb/
 
+# FAACT project (separate git repo, do not track)
+faact/
+
 # Data
 *.hdf5
 *.h5
 *.pkl
 *.parquet
+
+# Run outputs
+failure_prediction_runs/
+outputs/
+lerobot.tar.gz

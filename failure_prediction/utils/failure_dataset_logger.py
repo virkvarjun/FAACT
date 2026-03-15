@@ -15,6 +15,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+# Buffers steps per episode, writes raw/episode_XXXXXX.npz. Keys: feat_decoder_mean, feat_encoder_latent_token, reward, done, etc.
 class FailureDatasetLogger:
     """Collects and saves per-episode rollout data for failure prediction.
 
@@ -44,8 +45,8 @@ class FailureDatasetLogger:
         self.save_images = save_images
         self.save_obs_state = save_obs_state
 
-        self._episode_meta = {}
-        self._step_data = []
+        self._episode_meta = {}  # checkpoint_path, task_name, success, etc.
+        self._step_data = []    # list of step dicts; flushed on save
         self._episode_active = False
 
     def start_episode(
@@ -127,6 +128,7 @@ class FailureDatasetLogger:
         if self.save_action_chunks and predicted_action_chunk is not None:
             step["predicted_action_chunk"] = np.asarray(predicted_action_chunk, dtype=np.float32)
 
+        # features come from features_to_numpy: decoder_mean, encoder_latent_token, latent_sample
         if self.save_embeddings and features is not None:
             for key, val in features.items():
                 if val is not None:
@@ -154,8 +156,7 @@ class FailureDatasetLogger:
         filename = self.raw_dir / f"episode_{ep_id:06d}.npz"
 
         arrays = {}
-        scalars_per_step = {}
-
+        # Collect all keys across steps; separate array vs scalar per step
         all_keys = set()
         for s in self._step_data:
             all_keys.update(s.keys())
@@ -171,6 +172,7 @@ class FailureDatasetLogger:
             else:
                 scalar_keys.add(key)
 
+        # Stack per-step arrays; fill missing with zeros to keep consistent shape
         for key in array_keys:
             vals = []
             for s in self._step_data:
@@ -188,6 +190,7 @@ class FailureDatasetLogger:
             except (ValueError, TypeError):
                 pass
 
+        # Store meta as single-element array so npz can hold it
         meta_json = json.dumps(self._episode_meta, default=str)
         arrays["_meta_json"] = np.array([meta_json])
 
@@ -204,7 +207,7 @@ class FailureDatasetLogger:
 
     @staticmethod
     def load_episode(path: str | Path) -> dict:
-        """Load a saved episode .npz file and return structured data."""
+        """Load episode from .npz. Returns {meta: {...}, arrays: {feat_*, reward, done, ...}}."""
         data = dict(np.load(path, allow_pickle=True))
         meta = json.loads(str(data.pop("_meta_json")[0]))
         return {"meta": meta, "arrays": data}

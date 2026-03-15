@@ -1,7 +1,8 @@
-"""Interfaces for later self-correction integration.
+"""Interfaces for pluggable risk scoring and intervention.
 
-Lightweight abstractions so runtime intervention can plug in without rewrites.
-Do NOT implement actual chunk interruption or recovery yet.
+RiskScorer: supervised MLP (predict_step).
+FiperScorer: RND + ACE (compute_scores).
+InterventionPolicy: when to interrupt (placeholder).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any
 
 @dataclass
 class RiskScore:
-    """Output of a risk scorer for one timestep."""
+    """Output of risk model for one timestep. prob = sigmoid(logit)."""
     logit: float
     prob: float
     raw_score: float | None = None
@@ -47,7 +48,7 @@ class FiperScorer(ABC):
 
 @dataclass
 class InterventionDecision:
-    """Whether to interrupt and what to do (placeholder)."""
+    """Placeholder for future: whether to interrupt, recovery action, confidence."""
     should_interrupt: bool
     reason: str = ""
     confidence: float = 0.0

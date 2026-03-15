@@ -37,6 +37,7 @@ def create_episode_splits(
             f"Fractions must sum to 1.0, got train={train_frac} val={val_frac} test={test_frac}"
         )
 
+    # Split by episode ID so all timesteps of one episode stay in same split (no leakage)
     unique_episodes = np.unique(episode_ids)
     n_episodes = len(unique_episodes)
 
@@ -56,7 +57,7 @@ def create_episode_splits(
     train_eps = set(perm[:n_train])
     val_eps = set(perm[n_train : n_train + n_val])
     test_eps = set(perm[n_train + n_val :])
-
+    # Masks: bool per timestep, True if that timestep's episode is in split
     train_mask = np.array([e in train_eps for e in episode_ids])
     val_mask = np.array([e in val_eps for e in episode_ids])
     test_mask = np.array([e in test_eps for e in episode_ids])

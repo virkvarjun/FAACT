@@ -78,6 +78,7 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    # load_failure_dataset: processed dir or mock. Episode-level splits to avoid leakage.
     features, labels, episode_ids, timesteps, input_dim, metadata = load_failure_dataset(
         processed_dir=args.processed_dir,
         feature_field=args.feature_field,
@@ -90,6 +91,7 @@ def main():
         mock_seed=args.seed,
     )
 
+    # Episode-level splits (not timestep) to avoid train/val leakage
     train_mask, val_mask, test_mask = create_episode_splits(
         episode_ids,
         train_frac=args.train_frac,
@@ -100,6 +102,7 @@ def main():
 
     split_stats = split_summary(labels, train_mask, val_mask, test_mask, episode_ids)
 
+    # Convert to tensors; train only on train split
     X_train = torch.from_numpy(features[train_mask]).float()
     y_train = torch.from_numpy(labels[train_mask]).float().unsqueeze(1)
     X_val = torch.from_numpy(features[val_mask]).float()
@@ -119,7 +122,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     pos_weight = args.pos_weight
-    if pos_weight is None and not args.mock_data:
+    if pos_weight is None and not args.mock_data:  # auto pos_weight for class imbalance
         n_pos = int((labels[train_mask] > 0.5).sum())
         n_neg = int(train_mask.sum()) - n_pos
         if n_pos > 0 and n_neg > 0:
@@ -155,7 +158,7 @@ def main():
         json.dump(split_stats, f, indent=2)
 
     best_val_auroc = -1.0
-    metrics_history = []
+    metrics_history = []  # AUROC/AUPRC per epoch
 
     for epoch in range(args.epochs):
         model.train()
@@ -164,7 +167,7 @@ def main():
             Xb, yb = Xb.to(args.device), yb.to(args.device)
             optimizer.zero_grad()
             logits = model(Xb)
-            loss = F.binary_cross_entropy_with_logits(
+            loss = F.binary_cross_entropy_with_logits(  # BCE, no sigmoid (logits in)
                 logits, yb.squeeze(-1), pos_weight=pos_weight_t
             )
             loss.backward()
@@ -214,6 +217,8 @@ def main():
 
     probs_val = 1.0 / (1.0 + np.exp(-np.clip(logits_val, -500, 500)))
     probs_test = 1.0 / (1.0 + np.exp(-np.clip(logits_test, -500, 500)))
+
+    # Save predictions for analysis (episode_ids, timesteps allow per-episode breakdown)
 
     val_ep = episode_ids[val_mask]
     val_ts = timesteps[val_mask]

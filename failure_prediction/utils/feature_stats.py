@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def compute_feature_stats(arr: np.ndarray) -> dict[str, Any]:
-    """Compute per-field statistics for a numeric array."""
+    """Compute per-field statistics for a numeric array (shape, dtype, min/max, mean, std)."""
     arr = np.asarray(arr)
     stats: dict[str, Any] = {
         "shape": list(arr.shape),
@@ -29,6 +29,7 @@ def compute_feature_stats(arr: np.ndarray) -> dict[str, Any]:
         stats["std"] = np.nan
         return stats
 
+    # Flatten to (n_samples, n_features) for per-sample stats
     flat = arr.reshape(arr.shape[0], -1) if arr.ndim > 1 else arr.reshape(-1, 1)
     stats["has_nan"] = bool(np.isnan(flat).any())
     stats["has_inf"] = bool(np.isinf(flat).any())
@@ -46,7 +47,7 @@ def compute_feature_stats(arr: np.ndarray) -> dict[str, Any]:
 
 
 def inspect_dataset_features(dataset: dict) -> dict[str, Any]:
-    """Inspect all feature fields in a processed dataset."""
+    """Inspect all feature fields (feat_*, etc.) and compute stats. Used for debugging/visualization."""
     feature_fields = get_available_feature_fields(dataset)
     result: dict[str, Any] = {
         "feature_fields": feature_fields,

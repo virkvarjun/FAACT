@@ -21,8 +21,8 @@ def _safe_divide(a: float, b: float, default: float = 0.0) -> float:
 
 
 def _auroc_numpy(probs: np.ndarray, labels: np.ndarray) -> float:
-    """Pure numpy AUROC (area under ROC curve)."""
-    order = np.argsort(-probs)
+    """Pure numpy AUROC (area under ROC curve). Fallback when sklearn not available."""
+    order = np.argsort(-probs)  # descending by predicted prob
     labels_sorted = labels[order]
     n_pos = labels.sum()
     n_neg = len(labels) - n_pos
@@ -75,7 +75,7 @@ def compute_binary_metrics(
     n_pos = int((labels > 0.5).sum())
     n_neg = n - n_pos
 
-    probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -500, 500)))
+    probs = 1.0 / (1.0 + np.exp(-np.clip(logits, -500, 500)))  # sigmoid; clip avoids overflow
 
     result: dict[str, float | int] = {
         "n_samples": n,

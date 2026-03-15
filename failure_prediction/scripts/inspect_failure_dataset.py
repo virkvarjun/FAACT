@@ -41,9 +41,19 @@ def parse_args():
 
 
 def choose_raw_episode(raw_dir: Path, mode: str) -> Path:
+    if not raw_dir.exists():
+        raise FileNotFoundError(
+            f"Raw directory does not exist: {raw_dir}. "
+            "Run collection first or point --raw_dir at the dataset's actual raw/ directory."
+        )
+    if not raw_dir.is_dir():
+        raise NotADirectoryError(f"--raw_dir is not a directory: {raw_dir}")
     episodes = sorted(raw_dir.glob("episode_*.npz"))
     if not episodes:
-        raise FileNotFoundError(f"No episode_*.npz files found in {raw_dir}")
+        raise FileNotFoundError(
+            f"No episode_*.npz files found in {raw_dir}. "
+            "Check that collection completed and that you are pointing at the raw/ subdirectory."
+        )
     if mode == "first":
         return episodes[0]
     if mode == "last":
@@ -139,6 +149,11 @@ def main():
         raw_report = inspect_raw_episode(choose_raw_episode(Path(args.raw_dir), args.sample_episode))
 
     if args.processed_dir:
+        if not Path(args.processed_dir).exists():
+            raise FileNotFoundError(
+                f"Processed directory does not exist: {args.processed_dir}. "
+                "Run postprocessing first or pass the correct processed dataset path."
+            )
         processed_report = inspect_processed_dataset(
             args.processed_dir,
             failure_horizon=args.failure_horizon,
@@ -146,6 +161,11 @@ def main():
             max_success_examples_to_check=args.max_success_examples_to_check,
         )
     elif args.processed_file:
+        if not Path(args.processed_file).exists():
+            raise FileNotFoundError(
+                f"Processed dataset file does not exist: {args.processed_file}. "
+                "Run postprocessing first or pass the correct timestep_dataset.npz path."
+            )
         processed_report = inspect_processed_dataset(
             args.processed_file,
             failure_horizon=args.failure_horizon,

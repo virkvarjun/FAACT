@@ -1,0 +1,113 @@
+{
+  "seed": 200,
+  "runs": [
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_hybrid_t050_n8_m002_cap2_s200",
+      "mode": "intervention",
+      "success_rate": 0.1,
+      "n_success": 1,
+      "num_episodes": 10,
+      "total_interventions": 15,
+      "accepted_intervention_rate": 0.7894736842105263,
+      "better_candidate_available_rate": 0.7894736842105263,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.08699546163404183
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_hybrid_t055_n8_m002_cap2_s200",
+      "mode": "intervention",
+      "success_rate": 0.1,
+      "n_success": 1,
+      "num_episodes": 10,
+      "total_interventions": 10,
+      "accepted_intervention_rate": 0.7692307692307693,
+      "better_candidate_available_rate": 0.7692307692307693,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.09076595042288102
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_hybrid_t060_n12_m002_cap2_s200",
+      "mode": "intervention",
+      "success_rate": 0.1,
+      "n_success": 1,
+      "num_episodes": 10,
+      "total_interventions": 8,
+      "accepted_intervention_rate": 1.0,
+      "better_candidate_available_rate": 1.0,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.19877358435860149
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_baseline_s200",
+      "mode": "baseline",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 20,
+      "total_interventions": 0,
+      "accepted_intervention_rate": 0,
+      "better_candidate_available_rate": 0.0,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": 0.0
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_monitor_s200",
+      "mode": "monitor_only",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 20,
+      "total_interventions": 0,
+      "accepted_intervention_rate": 0,
+      "better_candidate_available_rate": 0.0,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": 0.0
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_obs_t050_n8_s200",
+      "mode": "intervention",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 10,
+      "total_interventions": 22,
+      "accepted_intervention_rate": 1.0,
+      "better_candidate_available_rate": 1.0,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.1635403790067615
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_obs_t050_n8_m002_l2_1_s200",
+      "mode": "intervention",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 10,
+      "total_interventions": 15,
+      "accepted_intervention_rate": 0.8333333333333334,
+      "better_candidate_available_rate": 0.9444444444444444,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.11967082633241513
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_action_t050_n12_m002_cap2_s200",
+      "mode": "intervention",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 10,
+      "total_interventions": 0,
+      "accepted_intervention_rate": 0.0,
+      "better_candidate_available_rate": 0.0,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": 0.0
+    },
+    {
+      "run": "failure_prediction_runs/pi0_eval_combo_hybrid_t055_n12_m005_cap2_s200",
+      "mode": "intervention",
+      "success_rate": 0.0,
+      "n_success": 0,
+      "num_episodes": 10,
+      "total_interventions": 13,
+      "accepted_intervention_rate": 0.8666666666666667,
+      "better_candidate_available_rate": 0.8666666666666667,
+      "recovery_after_intervention": 0,
+      "mean_best_candidate_risk_delta": -0.18061216455726223
+    }
+  ]
+}

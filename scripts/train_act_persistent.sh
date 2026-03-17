@@ -39,7 +39,8 @@ esac
 
 OUTPUT_DIR="${OUTPUT_BASE}/train/act_${TASK}"
 JOB_NAME="act_${TASK}"
-mkdir -p "${OUTPUT_DIR}"
+# Clear previous run (lerobot-train refuses to overwrite when resume=False)
+rm -rf "${OUTPUT_DIR}"
 
 echo "================================================"
 echo "  LeRobot ACT Training (PERSISTENT)"

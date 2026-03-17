@@ -188,11 +188,18 @@ def run_episode(
     action_noise_std: float = 0.05,
     action_noise_prefix_steps: int = 10,
     min_candidate_l2_to_baseline: float = 0.0,
+    min_candidate_prefix_l2_to_baseline: float = 0.0,
+    max_candidate_tail_l2_to_baseline: float | None = None,
+    local_search_prefix_steps: int = 10,
     rng: np.random.Generator | None = None,
     policy_type: str = "act",
     task_desc: str | None = None,
 ) -> dict:
     """Run one episode through the shared FAACT wrapper runtime."""
+    score_every_step = any(
+        "remaining" in feature_key
+        for feature_key in getattr(risk_scorer, "feature_keys", []) or []
+    )
     config = EpisodeRunnerConfig(
         mode=mode,
         num_candidate_chunks=num_candidate_chunks,
@@ -203,12 +210,15 @@ def run_episode(
         action_noise_std=action_noise_std,
         action_noise_prefix_steps=action_noise_prefix_steps,
         task_desc=task_desc,
-        score_every_step=("remaining" in (getattr(risk_scorer, "feature_key", "") or "")),
+        score_every_step=score_every_step,
         temporal_ensemble_coeff=temporal_ensemble_coeff if policy_type == "act" else None,
         cooldown_steps=getattr(intervention_policy, "cooldown_steps", 0),
         max_interventions_per_episode=getattr(intervention_policy, "max_interventions_per_episode", None),
         boundary_only_intervention=getattr(intervention_policy, "boundary_only", False),
         min_candidate_l2_to_baseline=min_candidate_l2_to_baseline,
+        min_candidate_prefix_l2_to_baseline=min_candidate_prefix_l2_to_baseline,
+        max_candidate_tail_l2_to_baseline=max_candidate_tail_l2_to_baseline,
+        local_search_prefix_steps=local_search_prefix_steps,
     )
     result, _frames = run_wrapper_episode(
         env=env,
@@ -266,6 +276,12 @@ def parse_args():
                     help="Only allow alarms/interventions when proposing a fresh chunk")
     p.add_argument("--min_candidate_l2_to_baseline", type=float, default=0.0,
                     help="Reject candidate swaps that are too similar to baseline")
+    p.add_argument("--min_candidate_prefix_l2_to_baseline", type=float, default=0.0,
+                    help="Require accepted swaps to edit the near-term action prefix")
+    p.add_argument("--max_candidate_tail_l2_to_baseline", type=float, default=None,
+                    help="Optional upper bound on how much the candidate tail can diverge from baseline")
+    p.add_argument("--local_search_prefix_steps", type=int, default=10,
+                    help="Prefix length used when measuring local-recovery edits")
     return p.parse_args()
 
 
@@ -372,6 +388,9 @@ def main():
             action_noise_std=args.action_noise_std,
             action_noise_prefix_steps=args.action_noise_prefix_steps,
             min_candidate_l2_to_baseline=args.min_candidate_l2_to_baseline,
+            min_candidate_prefix_l2_to_baseline=args.min_candidate_prefix_l2_to_baseline,
+            max_candidate_tail_l2_to_baseline=args.max_candidate_tail_l2_to_baseline,
+            local_search_prefix_steps=args.local_search_prefix_steps,
             rng=rng_ep,
             policy_type=args.policy_type,
             task_desc=args.task_desc or None,
@@ -381,6 +400,9 @@ def main():
             "max_interventions_per_episode": args.max_interventions_per_episode,
             "boundary_only_intervention": args.boundary_only_intervention,
             "min_candidate_l2_to_baseline": args.min_candidate_l2_to_baseline,
+            "min_candidate_prefix_l2_to_baseline": args.min_candidate_prefix_l2_to_baseline,
+            "max_candidate_tail_l2_to_baseline": args.max_candidate_tail_l2_to_baseline,
+            "local_search_prefix_steps": args.local_search_prefix_steps,
         }
         result["episode_id"] = ep_idx
         all_results.append(result)
@@ -435,11 +457,16 @@ def main():
         "max_interventions_per_episode": args.max_interventions_per_episode,
         "boundary_only_intervention": args.boundary_only_intervention,
         "min_candidate_l2_to_baseline": args.min_candidate_l2_to_baseline,
+        "min_candidate_prefix_l2_to_baseline": args.min_candidate_prefix_l2_to_baseline,
+        "max_candidate_tail_l2_to_baseline": args.max_candidate_tail_l2_to_baseline,
+        "local_search_prefix_steps": args.local_search_prefix_steps,
     }
 
     alarm_risks = []
     accepted_deltas = []
     best_candidate_deltas = []
+    best_candidate_prefix_l2 = []
+    best_candidate_tail_l2 = []
     better_candidate_attempts = 0
     total_alarm_steps = 0
     total_boundary_alarms = 0
@@ -460,6 +487,10 @@ def main():
         for item in result.get("interventions", []):
             if item.get("best_candidate_risk_delta") is not None:
                 best_candidate_deltas.append(float(item["best_candidate_risk_delta"]))
+            if item.get("best_candidate_prefix_l2_to_baseline") is not None:
+                best_candidate_prefix_l2.append(float(item["best_candidate_prefix_l2_to_baseline"]))
+            if item.get("best_candidate_tail_l2_to_baseline") is not None:
+                best_candidate_tail_l2.append(float(item["best_candidate_tail_l2_to_baseline"]))
             if item.get("accepted", False) and item.get("risk_delta") is not None:
                 accepted_deltas.append(float(item["risk_delta"]))
             reason = item.get("rejection_reason", "")
@@ -476,6 +507,8 @@ def main():
     metrics["mean_alarm_risk"] = _mean(alarm_risks)
     metrics["mean_accepted_risk_delta"] = _mean(accepted_deltas)
     metrics["mean_best_candidate_risk_delta"] = _mean(best_candidate_deltas)
+    metrics["mean_best_candidate_prefix_l2_to_baseline"] = _mean(best_candidate_prefix_l2)
+    metrics["mean_best_candidate_tail_l2_to_baseline"] = _mean(best_candidate_tail_l2)
     metrics["rejection_reason_counts"] = rejection_reason_counts
 
     # Lead time: steps from first intervention to actual failure (for failed episodes)

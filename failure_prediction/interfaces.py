@@ -52,6 +52,7 @@ class InterventionDecision:
     should_interrupt: bool
     reason: str = ""
     confidence: float = 0.0
+    details: dict[str, Any] | None = None
 
 
 class InterventionPolicy(ABC):

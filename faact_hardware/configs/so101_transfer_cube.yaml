@@ -26,8 +26,9 @@ backbone:
   task_desc: transfer the cube to the target
   replan_interval: 50
 
+# Set enabled: true only when risk_model_ckpt points to a real dir with config.json (see failure_prediction runs)
 risk:
-  enabled: true
+  enabled: false
   risk_model_ckpt: failure_prediction_runs/pi0_sweep_combo_decision_auroc
   risk_feature_field: feat_action_prefix_flat_10,feat_action_chunk_mean
   risk_threshold: 0.55

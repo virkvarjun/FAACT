@@ -1,0 +1,61 @@
+# Step 1 smoke test: short episode, policy motion logged but follower dry-run by default.
+# Copy of ports/camera from so101_transfer_cube.yaml — edit camera index if iPhone is not 0.
+# See docs/SO101_USB_PORTS.md
+
+robot:
+  robot_type: so101_follower
+  robot_port: /dev/tty.usbmodem5AE60583121
+  robot_id: so101_follower_1
+  teleop_type: so101_leader
+  teleop_port: /dev/tty.usbmodem5AE60798501
+  teleop_id: so101_leader_1
+  dry_run: true
+  connect_calibrate: false
+  control_hz: 10
+  max_relative_target: 0.2
+  use_degrees: true
+  cameras:
+    top:
+      index_or_path: 0
+      fps: 30
+      width: 640
+      height: 480
+
+backbone:
+  policy_type: pi0
+  checkpoint: lerobot/pi0_base
+  device: mps
+  task_desc: transfer the cube to the target
+  replan_interval: 50
+
+risk:
+  enabled: false
+  risk_model_ckpt: ""
+  risk_feature_field: ""
+  risk_threshold: 0.55
+  boundary_only_intervention: true
+  max_interventions_per_episode: 2
+  cooldown_steps: 0
+
+runtime:
+  mode: shadow
+  chunk_size: 50
+  num_candidate_chunks: 8
+  candidate_source: hybrid
+  switch_margin: 0.02
+  obs_noise_std: 0.05
+  action_noise_std: 0.08
+  action_noise_prefix_steps: 12
+  min_candidate_l2_to_baseline: 1.0
+  min_candidate_prefix_l2_to_baseline: 0.0
+  max_candidate_tail_l2_to_baseline:
+  local_search_prefix_steps: 8
+  max_steps: 30
+  log_dir: faact_hardware/runs/so101_smoke_test
+
+safety:
+  require_human_armed: true
+  halt_on_missing_observation: true
+  halt_on_invalid_chunk: true
+  halt_on_runtime_error: true
+  max_abs_action_value: 1.5

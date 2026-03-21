@@ -55,12 +55,37 @@ def parse_args() -> argparse.Namespace:
         help="Connect to SO101 follower via LeRobot (requires cameras + USB)",
     )
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--max-steps",
+        type=int,
+        default=None,
+        help="Override config runtime.max_steps (e.g. 30 for smoke tests)",
+    )
+    dry = p.add_mutually_exclusive_group()
+    dry.add_argument(
+        "--dry-run",
+        dest="dry_run_override",
+        action="store_true",
+        help="Force robot.dry_run=true (no follower motion)",
+    )
+    dry.add_argument(
+        "--no-dry-run",
+        dest="no_dry_run",
+        action="store_true",
+        help="Force robot.dry_run=false (follower executes commands)",
+    )
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
+    if args.max_steps is not None:
+        cfg.runtime.max_steps = int(args.max_steps)
+    if args.dry_run_override:
+        cfg.robot.dry_run = True
+    elif args.no_dry_run:
+        cfg.robot.dry_run = False
     rng = np.random.default_rng(args.seed)
 
     backbone = make_backbone_wrapper(

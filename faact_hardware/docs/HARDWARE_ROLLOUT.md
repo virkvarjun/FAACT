@@ -10,6 +10,28 @@ Use [`run_hardware_faact.py`](../scripts/run_hardware_faact.py) as the main entr
 - **Calibration**: use `robot.connect_calibrate: false` and matching `robot_id` so existing calibration is applied without prompts (see [HARDWARE_SAFETY.md](HARDWARE_SAFETY.md)).
 - **Observation contract**: real runs use `agent_pos` + `pixels` via [`so101_bridge`](../faact_hardware/so101_bridge.py). PI0/ACT wrappers accept `observation.state` or `agent_pos`.
 
+## Step 1 — Physical smoke test (quick)
+
+Use [`so101_smoke_test.yaml`](../configs/so101_smoke_test.yaml): **`risk.enabled: false`**, **`dry_run: true`**, **`max_steps: 30`**. Edit **`robot.cameras.top.index_or_path`** if the iPhone / Continuity camera is not index `0`.
+
+```bash
+cd /path/to/Research
+export PY="$CONDA_PREFIX/bin/python"   # after: conda activate your-env
+export HF_TOKEN="..."                  # if hub download needs it
+export PYTHONPATH="faact_hardware:faact:."
+
+$PY faact_hardware/scripts/run_hardware_faact.py \
+  --config faact_hardware/configs/so101_smoke_test.yaml \
+  --use-real-robot \
+  --seed 0
+```
+
+Optional CLI overrides: `--max-steps 20`, `--dry-run`, `--no-dry-run`.
+
+Or: `bash faact_hardware/scripts/run_step1_smoke.sh` (requires `export PY=...` first).
+
+**Exit criteria**: process exits 0, logs under `faact_hardware/runs/so101_smoke_test/`.
+
 ## Phase 1 — Shadow (policy + risk, no physical motion)
 
 Use **dummy observations** and `DryRunRobot` (default without `--use-real-robot`):

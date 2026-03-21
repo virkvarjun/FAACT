@@ -53,7 +53,38 @@ PYTHONPATH="faact_hardware:faact:." python faact_hardware/scripts/run_hardware_f
 
 **Exit criteria**: `hardware_interventions.jsonl` records attempts; `accepted_interventions` reflects successful chunk replacements.
 
+## Camera: Mac built-in, iPhone (Continuity), third-party apps
+
+LeRobot uses **OpenCV**-style camera indices (`robot.cameras.*.index_or_path` in YAML).
+
+- **Built-in FaceTime camera** on Mac is often index **`0`**.
+- **iPhone as Mac webcam** (Continuity Camera) or **third-party apps** (Camo, EpocCam, etc. that install a **virtual webcam**) usually appear as **another index** — try **`0`**, **`1`**, **`2`** until the image in logs matches what you expect.
+- Third-party apps do **not** need custom FAACT code: they expose a normal macOS camera device; only the **index** in YAML changes.
+- Grant **Camera** permission for Terminal / your IDE (macOS **Privacy & Security**).
+
+See also [SO101_USB_PORTS.md](SO101_USB_PORTS.md) (camera subsection).
+
+## Simulation vs your physical bench
+
+If FAACT’s **risk model** was trained in **simulation** and/or the **policy** is a **base** checkpoint (`lerobot/pi0_base`) while your **task, objects, lighting, and camera view** (e.g. iPhone on a tripod) differ from sim:
+
+- **Risk scores** may be poorly calibrated or noisy; treat **`risk.enabled: true`** as experimental until you validate or retrain on **real** trajectories.
+- **Policy behavior** may be weak or irrelevant until you **fine-tune** (or fully train) on **your** SO101 dataset for **your** task.
+- **One leader + one follower** is normal: teleop uses both; **autonomous FAACT** uses the **follower** + **camera** only (leader can stay disconnected when debugging USB if needed).
+
+This is **expected domain shift**, not a sign the wiring is wrong.
+
 ## Tuning notes (domain shift)
 
 - Simulation-trained risk models are often miscalibrated on real images; lower or raise `risk_threshold`, or recalibrate / fine-tune on a small real dataset.
 - Point `backbone.checkpoint` at a policy trained on **your** SO101 task for meaningful behavior.
+
+## Next steps (recommended order for your situation)
+
+1. **Stabilize hardware**: follower USB + camera index (iPhone/virtual cam = try indices until correct). Keep **`robot.dry_run: true`** until the run completes without comms errors.
+2. **Run policy-only**: leave **`risk.enabled: false`**, **`runtime.mode: shadow`**, short **`max_steps`**. Confirm logs and that observations look sane.
+3. **Closed-loop (supervised)**: **`robot.dry_run: false`**, conservative **`max_relative_target`**, still short episodes.
+4. **Data**: record a **LeRobot dataset** on **this** task with **this** camera + follower (`lerobot-record` or your usual pipeline).
+5. **Policy**: fine-tune (or train) a checkpoint on that dataset; point **`backbone.checkpoint`** at it.
+6. **Risk**: collect failure labels or proxy outcomes on **real** features; retrain the MLP (or recalibrate threshold); set **`risk.enabled: true`** and validate alarms.
+7. **FAACT intervention**: set **`runtime.mode: intervene`** only after alarms look trustworthy; tune **`switch_margin`**, candidate counts, locality knobs as in sim.
